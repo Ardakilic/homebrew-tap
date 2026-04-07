@@ -1,10 +1,12 @@
-# homebrew-lilt
+# homebrew-tap
 Lilt: A tool written with Golang that converts HiFi Flac files on a folder recursively
+
+## Lilt
 
 To install Lilt using [Homebrew](https://brew.sh), simply execute:
 
 ```bash
-brew tap Ardakilic/lilt
+brew tap Ardakilic/tap
 brew install lilt
 ```
 
