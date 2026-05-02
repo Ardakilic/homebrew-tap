@@ -1,0 +1,110 @@
+name: Update rb-scrobbler formula
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+
+      - name: Check for new release
+        id: check
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -s https://api.github.com/repos/jeselnik/rb-scrobbler/releases/latest | jq -r '.tag_name')
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+          if [ -f .last_seen_release ]; then
+            SEEN=$(grep '^rb-scrobbler=' .last_seen_release | cut -d= -f2 || true)
+            if [ "$SEEN" = "$LATEST" ]; then
+              echo "new_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "new_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "new_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download assets and compute SHA256s
+        if: steps.check.outputs.new_release == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.check.outputs.latest }}"
+
+          curl -sL -o darwin-amd64 "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-darwin-amd64"
+          SHA_DARWIN_AMD64=$(sha256sum darwin-amd64 | cut -d' ' -f1)
+
+          curl -sL -o darwin-arm64 "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-darwin-arm64"
+          SHA_DARWIN_ARM64=$(sha256sum darwin-arm64 | cut -d' ' -f1)
+
+          curl -sL -o linux-amd64 "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-linux-amd64"
+          SHA_LINUX_AMD64=$(sha256sum linux-amd64 | cut -d' ' -f1)
+
+          curl -sL -o linux-arm64 "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-linux-arm64"
+          SHA_LINUX_ARM64=$(sha256sum linux-arm64 | cut -d' ' -f1)
+
+          cat > Formula/rb-scrobbler.rb <<EOF
+          class RbScrobbler < Formula
+            desc "Minimal Rockbox Last.fm Scrobbler (.scrobbler.log files)"
+            homepage "https://github.com/jeselnik/rb-scrobbler"
+            license "GPL-3.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-darwin-arm64"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-darwin-amd64"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-linux-arm64"
+                sha256 "${SHA_LINUX_ARM64}"
+              else
+                url "https://github.com/jeselnik/rb-scrobbler/releases/download/${VERSION}/rb-scrobbler-linux-amd64"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin_name = if OS.mac?
+                "rb-scrobbler-darwin-\#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
+              elsif OS.linux?
+                "rb-scrobbler-linux-\#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
+              end
+              bin.install bin_name => "rb-scrobbler"
+            end
+
+            test do
+              system "\#{bin}/rb-scrobbler", "-help"
+            end
+          end
+          EOF
+
+          # Update state file
+          if [ -f .last_seen_release ]; then
+            sed -i "s/^rb-scrobbler=.*/rb-scrobbler=${VERSION}/" .last_seen_release
+          else
+            echo "rb-scrobbler=${VERSION}" > .last_seen_release
+          fi
+
+          rm -f darwin-amd64 darwin-arm64 linux-amd64 linux-arm64
+
+      - name: Commit and push changes
+        if: steps.check.outputs.new_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/rb-scrobbler.rb .last_seen_release
+          git commit -m "chore: bump rb-scrobbler to ${{ steps.check.outputs.latest }}"
+          git push
