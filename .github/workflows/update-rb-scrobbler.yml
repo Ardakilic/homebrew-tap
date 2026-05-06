@@ -78,15 +78,15 @@ jobs:
 
             def install
               bin_name = if OS.mac?
-                "rb-scrobbler-darwin-\#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
+                "rb-scrobbler-darwin-#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
               elsif OS.linux?
-                "rb-scrobbler-linux-\#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
+                "rb-scrobbler-linux-#{Hardware::CPU.arm? ? 'arm64' : 'amd64'}"
               end
               bin.install bin_name => "rb-scrobbler"
             end
 
             test do
-              system "\#{bin}/rb-scrobbler", "-help"
+              system "#{bin}/rb-scrobbler", "-help"
             end
           end
           EOF

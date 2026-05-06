@@ -1,0 +1,106 @@
+name: Update feishin cask
+
+on:
+  schedule:
+    - cron: '5 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+
+      - name: Check for new release
+        id: check
+        run: |
+          set -euo pipefail
+          LATEST=$(curl -s https://api.github.com/repos/jeffvli/feishin/releases/latest | jq -r '.tag_name')
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+          # Strip v prefix for cask version
+          VERSION="${LATEST#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ -f .last_seen_release ]; then
+            SEEN=$(grep '^feishin=' .last_seen_release | cut -d= -f2 || true)
+            if [ "$SEEN" = "$LATEST" ]; then
+              echo "new_release=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "new_release=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "new_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download assets and compute SHA256s
+        if: steps.check.outputs.new_release == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.check.outputs.version }}"
+          LATEST="${{ steps.check.outputs.latest }}"
+
+          curl -sL -o feishin-arm64.dmg "https://github.com/jeffvli/feishin/releases/download/${LATEST}/Feishin-${VERSION}-mac-arm64.dmg"
+          SHA_ARM64=$(sha256sum feishin-arm64.dmg | cut -d' ' -f1)
+
+          curl -sL -o feishin-x64.dmg "https://github.com/jeffvli/feishin/releases/download/${LATEST}/Feishin-${VERSION}-mac-x64.dmg"
+          SHA_X64=$(sha256sum feishin-x64.dmg | cut -d' ' -f1)
+
+          mkdir -p Casks
+          cat > Casks/feishin.rb <<EOF
+          cask "feishin" do
+            arch arm: "arm64", intel: "x64"
+
+            version "${VERSION}"
+            sha256 arm:   "${SHA_ARM64}",
+                   intel: "${SHA_X64}"
+
+            url "https://github.com/jeffvli/feishin/releases/download/v#{version}/Feishin-#{version}-mac-#{arch}.dmg"
+            name "Feishin"
+            desc "Modern self-hosted music player"
+            homepage "https://github.com/jeffvli/feishin"
+
+            auto_updates true
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on macos: ">= :catalina"
+
+            app "Feishin.app"
+
+            zap trash: [
+              "~/Library/Application Support/feishin",
+              "~/Library/Logs/feishin",
+              "~/Library/Preferences/org.jeffvli.feishin.plist",
+              "~/Library/Saved Application State/org.jeffvli.feishin.savedState",
+            ]
+          end
+          EOF
+
+          # Update state file
+          if [ -f .last_seen_release ]; then
+            if grep -q '^feishin=' .last_seen_release; then
+              sed -i "s/^feishin=.*/feishin=${LATEST}/" .last_seen_release
+            else
+              echo "feishin=${LATEST}" >> .last_seen_release
+            fi
+          else
+            echo "feishin=${LATEST}" > .last_seen_release
+          fi
+
+          rm -f feishin-arm64.dmg feishin-x64.dmg
+
+      - name: Commit and push changes
+        if: steps.check.outputs.new_release == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/feishin.rb .last_seen_release
+          git commit -m "chore: bump feishin to ${{ steps.check.outputs.latest }}"
+          git push
