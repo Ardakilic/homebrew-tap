@@ -5,11 +5,11 @@ class Lilt < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://github.com/Ardakilic/lilt/releases/download/v3.2.0/lilt-darwin-arm64.tar.gz"
-      sha256 "d1faded426f3930f7c99959697c0405283b9646a006e3f88e4f307cb5cfaba6c"
+      url "https://github.com/Ardakilic/lilt/releases/download/v3.3.0/lilt-darwin-arm64.tar.gz"
+      sha256 "8028ba93c7543b955b65a08680c0be049e04b9968ef4d34fa7350b98e8dc6289"
     else
-      url "https://github.com/Ardakilic/lilt/releases/download/v3.2.0/lilt-darwin-amd64.tar.gz"
-      sha256 "f51576f6f24235bc1c55f2b81a826eb918cbdc4549a04c77d95c341191da1512"
+      url "https://github.com/Ardakilic/lilt/releases/download/v3.3.0/lilt-darwin-amd64.tar.gz"
+      sha256 "8eca34e6d76011ff3d350383252d90e0a98e142795313cca4e8824fac4231e15"
     end
   end
 
